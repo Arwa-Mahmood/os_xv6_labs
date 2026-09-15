@@ -23,7 +23,8 @@ process(int fd)
       num = num * 10 + (c - '0');
       have_digit = 1;
     } else {
-      valid = 0;  // letter or other junk char breaks this as a "pure number" token
+      valid =
+        0; // letter or other junk char breaks this as a "pure number" token
     }
   }
 
