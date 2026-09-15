@@ -14,7 +14,7 @@
 
 #define MAXARGS 10
 
-int interactive = 1; 
+int interactive = 1;
 struct cmd {
   int type;
 };
@@ -137,7 +137,7 @@ int
 getcmd(char *buf, int nbuf)
 {
   if (interactive)
-     write(2, "$ ", 2);
+    write(2, "$ ", 2);
   memset(buf, 0, nbuf);
   gets(buf, nbuf);
   if (buf[0] == 0) // EOF
@@ -160,11 +160,10 @@ main(void)
   }
 
   {
-    struct stat st; 
-    if (fstat(0, &st) == 0 && st.type != T_DEVICE) 
-      interactive = 0; 
+    struct stat st;
+    if (fstat(0, &st) == 0 && st.type != T_DEVICE)
+      interactive = 0;
   }
-	
 
   // Read and run input commands.
   while (getcmd(buf, sizeof(buf)) >= 0) {

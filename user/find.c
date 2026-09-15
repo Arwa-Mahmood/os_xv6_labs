@@ -133,7 +133,7 @@ find(char *path, char *target)
         continue;
       }
 
-      if (match(target, fmtname(buf))){
+      if (match(target, fmtname(buf))) {
         if (exec_argc > 0)
           run_exec(buf);
         else
@@ -171,9 +171,8 @@ main(int argc, char *argv[])
   p += len;
   if (len == 0 || argv[2][len - 1] != '$')
     *p++ = '$';
-  *p = '\0';	
+  *p = '\0';
 
   find(argv[1], anchored);
   exit(0);
 }
-
