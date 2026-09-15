@@ -7,11 +7,10 @@
 char *exec_argv[MAXARG];
 int exec_argc = 0;
 
-
-char*
+char *
 fmtname(char *path)
 {
-  static char buf[DIRSIZ+1];
+  static char buf[DIRSIZ + 1];
   char *p;
 
   for (p = path + strlen(path); p >= path && *p != '/'; p--)
@@ -27,7 +26,7 @@ run_exec(char *file)
 {
   if (fork() == 0) {
     exec_argv[exec_argc] = file;
-    exec_argv[exec_argc+1] = 0;
+    exec_argv[exec_argc + 1] = 0;
     exec(exec_argv[0], exec_argv);
     fprintf(2, "find: exec %s failed\n", exec_argv[0]);
     exit(1);
@@ -39,7 +38,6 @@ run_exec(char *file)
 //------------regex matchher copied from grep.c --------------------
 int matchhere(char *, char *);
 int matchstar(int, char *, char *);
-
 
 int
 match(char *re, char *text)
@@ -102,11 +100,11 @@ find(char *path, char *target)
 
   if (st.type == T_FILE) {
     if (match(target, fmtname(path))) {
-	if (exec_argc > 0)
-	    run_exec(path);
-	else
-	    printf("%s\n", path);
-     }
+      if (exec_argc > 0)
+        run_exec(path);
+      else
+        printf("%s\n", path);
+    }
     close(fd);
     return;
   }
@@ -135,11 +133,11 @@ find(char *path, char *target)
         continue;
       }
 
-      if (strcmp(de.name, target) == 0){
+      if (strcmp(de.name, target) == 0) {
         if (exec_argc > 0)
           run_exec(buf);
-	else
-	printf("%s\n", buf);
+        else
+          printf("%s\n", buf);
       }
 
       if (st.type == T_DIR)
