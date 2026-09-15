@@ -133,7 +133,7 @@ find(char *path, char *target)
         continue;
       }
 
-      if (strcmp(de.name, target) == 0) {
+      if (match(target, fmtname(buf))){
         if (exec_argc > 0)
           run_exec(buf);
         else
@@ -150,6 +150,8 @@ find(char *path, char *target)
 int
 main(int argc, char *argv[])
 {
+  static char anchored[128];
+
   if (argc < 3) {
     fprintf(2, "Usage: find dir name [-exec cmd]\n");
     exit(1);
@@ -160,7 +162,18 @@ main(int argc, char *argv[])
     for (i = 4; i < argc; i++)
       exec_argv[exec_argc++] = argv[i];
   }
+  // build an anchored copy of the pattern once
+  char *p = anchored;
+  int len = strlen(argv[2]);
+  if (argv[2][0] != '^')
+    *p++ = '^';
+  memmove(p, argv[2], len);
+  p += len;
+  if (len == 0 || argv[2][len - 1] != '$')
+    *p++ = '$';
+  *p = '\0';	
 
-  find(argv[1], argv[2]);
+  find(argv[1], anchored);
   exit(0);
 }
+
