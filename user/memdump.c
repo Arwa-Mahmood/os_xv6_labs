@@ -4,8 +4,7 @@
 
 void memdump(char *fmt, char *data, int len);
 
-int
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
   if (argc == 1) {
     printf("Example 1:\n");
@@ -60,6 +59,63 @@ main(int argc, char *argv[])
 void
 memdump(char *fmt, char *data, int len)
 {
-  // Your code here.  `data` holds `len` valid bytes.
+  //`data` holds `len` valid bytes.
+  int pos = 0;
+
+  for (int i = 0; fmt[i] != '\0'; i++) {
+    char f = fmt[i];
+    int need = 0;
+
+    if (f == 'i') need = 4;
+    else if (f == 'p') need = 8;
+    else if (f == 'h') need = 2;
+    else if (f == 'c') need = 1;
+    else if (f == 's') need = 8;
+    // 'S' uses whatever remains, no fixed size needed
+
+    if (f != 'S' && pos + need > len) {
+      printf("memdump: not enough data for '%c'\n", f);
+      return;
+    }
+
+    if (f == 'i') {
+      uint64 v = 0;
+      for (int k = 3; k >= 0; k--) v = (v << 8) | (unsigned char)data[pos+k];
+      printf("%d\n", (int)v);
+      pos += 4;
+    } else if (f == 'p') {
+      uint64 v = 0;
+      for (int k = 7; k >= 0; k--) v = (v << 8) | (unsigned char)data[pos+k];
+      char hexdigits[] = "0123456789abcdef";
+      char buf[17];
+      buf[16] = 0;
+      for (int k = 15; k >= 0; k--) {
+        buf[k] = hexdigits[v & 0xf];
+        v >>= 4;
+      }
+      printf("%s\n", buf);
+      pos += 8;
+    } else if (f == 'h') {
+      uint64 v = 0;
+      for (int k = 1; k >= 0; k--) v = (v << 8) | (unsigned char)data[pos+k];
+      printf("%d\n", (short)v);
+      pos += 2;
+    } else if (f == 'c') {
+      printf("%c\n", data[pos]);
+      pos += 1;
+    } else if (f == 's') {
+      uint64 ptr = 0;
+      for (int k = 7; k >= 0; k--) ptr = (ptr << 8) | (unsigned char)data[pos+k];
+      printf("%s\n", (char*)ptr);
+      pos += 8;
+    } else if (f == 'S') {
+      int j = pos;
+      while (j < len && data[j] != '\0') j++;
+      for (int k = pos; k < j; k++)
+        printf("%c", data[k]);
+      printf("\n");
+      pos = len;
+    }
+  }
 
 }
