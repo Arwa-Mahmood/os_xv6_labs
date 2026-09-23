@@ -19,6 +19,7 @@ main()
     kinit();            // physical page allocator
     kvminit();          // create kernel page table
     kvminithart();      // turn on paging
+    //printk("free memory: %ld bytes\n", freemem());
     procinit();         // process table
     trapinit();         // trap vectors
     trapinithart();     // install kernel trap vector

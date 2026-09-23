@@ -110,3 +110,10 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+// FREEMEM FUNCTION
+uint64
+sys_freemem(void)
+{
+  return freemem();
+}
