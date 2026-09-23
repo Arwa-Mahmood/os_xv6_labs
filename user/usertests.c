@@ -2076,6 +2076,7 @@ sbrkmuch(char *s)
   // can one grow address space to something big?
   a = sbrk(0);
   amt = BIG - (uint64)a;
+
   p = sbrk(amt);
   if (p != a) {
     printf("%s: sbrk test failed to grow big address space; enough phys mem?\n",
@@ -2684,8 +2685,11 @@ lazy_copy(char *s)
 
   // read() and write() to these addresses should fail.
   unsigned long bad[] = {
-    0x3fffffc000, 0x3fffffd000, 0x3fffffe000,
-    0x3ffffff000, 0x4000000000, 0x8000000000,
+    0x3fffffc000,
+#ifndef LAB_PGTBL
+    0x3fffffd000, // uses for syscall page
+#endif
+    0x3fffffe000, 0x3ffffff000, 0x4000000000, 0x8000000000,
   };
   for (int i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
     int fd = open("README", 0);
@@ -2694,7 +2698,7 @@ lazy_copy(char *s)
       exit(1);
     }
     if (read(fd, (char *)bad[i], 512) >= 0) {
-      printf("read succeeded\n");
+      printf("read %lx succeeded\n", bad[i]);
       exit(1);
     }
     close(fd);
@@ -2704,7 +2708,7 @@ lazy_copy(char *s)
       exit(1);
     }
     if (write(fd, (char *)bad[i], 512) >= 0) {
-      printf("write succeeded\n");
+      printf("write %lx succeeded\n", bad[i]);
       exit(1);
     }
     close(fd);
@@ -2763,7 +2767,7 @@ lazy_sbrk(char *s)
     p = sbrklazy(0);
   }
 
-  int n = TRAPFRAME - PGSIZE - (uint64)p;
+  int n = UTOP - PGSIZE - (uint64)p;
 
   char *p1 = sbrklazy(n);
   if (p1 < 0 || p1 != p) {
@@ -2772,7 +2776,7 @@ lazy_sbrk(char *s)
   }
 
   p = sbrk(PGSIZE);
-  if (p < 0 || (uint64)p != TRAPFRAME - PGSIZE) {
+  if (p < 0 || (uint64)p != UTOP - PGSIZE) {
     printf("sbrk(%d) returned %p, not expected TRAPFRAME-PGSIZE\n", PGSIZE, p);
     exit(1);
   }
