@@ -273,6 +273,11 @@ kfork(void)
   }
   np->sz = p->sz;
 
+  // sandbox++ 
+  np->syscall_mask = p->syscall_mask;
+  safestrcpy(np->allowed_path, p->allowed_path, MAXPATH);
+
+
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 

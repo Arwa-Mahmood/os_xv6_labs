@@ -127,6 +127,8 @@ char*           safestrcpy(char*, const char*, int);
 int             strlen(const char*);
 int             strncmp(const char*, const char*, uint);
 char*           strncpy(char*, const char*, int);
+int             strcmp(const char*, const char*); //sandbox
+
 
 // syscall.c
 void            argint(int, int*);
