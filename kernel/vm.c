@@ -70,7 +70,6 @@ void
 kvminit(void)
 {
   kernel_pagetable = kvmmake();
-}
 
 // Switch the current CPU's h/w page table register to
 // the kernel's page table, and enable paging.
@@ -169,8 +168,9 @@ vmprint_walk(pagetable_t pt, int level, uint64 vabase)
     if(pte & PTE_W) printk("W");
     if(pte & PTE_X) printk("X");
     if(pte & PTE_U) printk("U");
+    if(level == 1 && (pte & (PTE_R | PTE_W | PTE_X)))
+      printk(" SUPER");
     printk("\n");
-
     if((pte & (PTE_R | PTE_W | PTE_X)) == 0)
       vmprint_walk((pagetable_t)PTE2PA(pte), level - 1, va);
   }
@@ -185,6 +185,56 @@ vmprint(pagetable_t pagetable)
 
 #endif
 
+// superpages  - q4 
+
+static int nsuper = 0;   // count of superpage PTEs (for the write-up)
+
+static int
+kmappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
+{
+  uint64 end = va + size;
+
+  if((va % PGSIZE) != 0)
+    panic("kmappages: va not aligned");
+  if((size % PGSIZE) != 0)
+    panic("kmappages: size not aligned");
+  if(size == 0)
+    panic("kmappages: size");
+
+  while(va < end){
+    uint64 step;
+    if(va % SUPERPGSIZE == 0 && pa % SUPERPGSIZE == 0 && end - va >= SUPERPGSIZE){
+      // superpage: write a leaf PTE at level 1
+      pagetable_t pt = pagetable;
+      pte_t *pte = &pt[PX(2, va)];
+      if(*pte & PTE_V){
+        pt = (pagetable_t)PTE2PA(*pte);
+      } else {
+        if((pt = (pagetable_t)kalloc()) == 0)
+          return -1;
+        memset(pt, 0, PGSIZE);
+        *pte = PA2PTE(pt) | PTE_V;
+      }
+      pte = &pt[PX(1, va)];
+      if(*pte & PTE_V)
+        panic("kmappages: remap");
+      *pte = PA2PTE(pa) | perm | PTE_V;
+      nsuper++;
+      step = SUPERPGSIZE;
+    } else {
+      pte_t *pte = walk(pagetable, va, 1);
+      if(pte == 0)
+        return -1;
+      if(*pte & PTE_V)
+        panic("kmappages: remap");
+      *pte = PA2PTE(pa) | perm | PTE_V;
+      step = PGSIZE;
+    }
+    va += step;
+    pa += step;
+  }
+  return 0;
+}
 
 // add a mapping to the kernel page table.
 // only used when booting.
@@ -192,7 +242,7 @@ vmprint(pagetable_t pagetable)
 void
 kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 {
-  if (mappages(kpgtbl, va, sz, pa, perm) != 0)
+  if (kmappages(kpgtbl, va, sz, pa, perm) != 0)
     panic("kvmmap");
 }
 
