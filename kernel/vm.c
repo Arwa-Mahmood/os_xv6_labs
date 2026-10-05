@@ -70,7 +70,7 @@ void
 kvminit(void)
 {
   kernel_pagetable = kvmmake();
-
+}
 // Switch the current CPU's h/w page table register to
 // the kernel's page table, and enable paging.
 void
