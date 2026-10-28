@@ -8,6 +8,10 @@
 #include "proc.h"
 #include "fs.h"
 
+
+extern struct spinlock refcnt_lock;
+extern int refcnt[];
+
 /*
  * the kernel's page table.
  */
@@ -301,7 +305,6 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
 
   for (i = 0; i < sz; i += PGSIZE) {
     if ((pte = walk(old, i, 0)) == 0)
@@ -310,13 +313,22 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       continue; // physical page hasn't been allocated
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if ((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char *)pa, PGSIZE);
-    if (mappages(new, i, PGSIZE, (uint64)mem, flags) != 0) {
-      kfree(mem);
+     
+      // ONLY mark as COW if it's a writable page
+    if(flags & PTE_W){ 
+      flags = (flags & ~PTE_W) | PTE_COW;
+      *pte = PA2PTE(pa) | flags;
+      sfence_vma();
+    }    
+
+
+    // Map the SAME physical page to the child
+    if (mappages(new, i, PGSIZE, pa, flags) != 0) {
       goto err;
     }
+
+    // Increment reference count for this page
+    kref((void*)pa);
   }
   return 0;
 
@@ -360,6 +372,12 @@ copyout(pagetable_t pagetable, uint64 psz, uint64 dstva, char *src, uint64 len)
     }
 
     pte = walk(pagetable, va0, 0);
+    if (pte != 0 && (*pte & PTE_COW)) {
+      if (cowfault(pagetable, va0) < 0)
+        return -1;
+      pa0 = PTE2PA(*pte); // Update pa0 to the new physical address
+    }
+    
     // forbid copyout over read-only user text pages.
     if ((*pte & PTE_W) == 0)
       return -1;
@@ -487,5 +505,70 @@ ismapped(pagetable_t pagetable, uint64 va)
   if (*pte & PTE_V) {
     return 1;
   }
+  return 0;
+}
+
+static void
+vmprint_rec(pagetable_t pt, int level)
+{
+  for(int i = 0; i < 512; i++){
+    pte_t pte = pt[i];
+    if(!(pte & PTE_V))
+      continue;
+    for(int j = 0; j <= level; j++)
+      printk(" ..");
+    printk("%d: pte %p pa %p flags %p\n", i, (void *)pte, (void *)PTE2PA(pte), (void *)PTE_FLAGS(pte));
+    if((pte & (PTE_R|PTE_W|PTE_X)) == 0)
+      vmprint_rec((pagetable_t)PTE2PA(pte), level + 1);
+  }
+}
+
+void
+vmprint(pagetable_t pt)
+{
+  vmprint_rec(pt, 0);
+}
+
+
+int
+cowfault(pagetable_t pagetable, uint64 va)
+{
+  pte_t *pte;
+  uint64 pa;
+  uint flags;
+  char *mem;
+
+  va = PGROUNDDOWN(va);
+  if(va >= MAXVA)
+    return -1;
+
+  pte = walk(pagetable, va, 0);
+  if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_COW) == 0)
+    return -1; // Not a valid COW page
+
+  pa = PTE2PA(*pte);
+  
+  acquire(&refcnt_lock);
+  int count = refcnt[pa / PGSIZE];
+  release(&refcnt_lock);
+
+  // If we are the only owner, just restore write permission
+  if(count == 1) {
+    *pte = (*pte | PTE_W) & ~PTE_COW;
+    sfence_vma();
+    return 0;
+  }
+
+  // Otherwise, allocate a new page and copy
+  if((mem = kalloc()) == 0)
+    return -1;
+  
+  memmove(mem, (char*)pa, PGSIZE);
+  
+  flags = (PTE_FLAGS(*pte) & ~PTE_COW) | PTE_W;
+  *pte = PA2PTE(mem) | flags;
+  sfence_vma();
+  
+  kfree((void*)pa); // Decrement old page's refcount
   return 0;
 }

@@ -23,10 +23,16 @@ struct {
   struct run *freelist;
 } kmem;
 
+// --- COW ADDITIONS ---
+struct spinlock refcnt_lock;
+int refcnt[PHYSTOP / PGSIZE];
+
+
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+  initlock(&refcnt_lock, "refcnt"); // COW ADDITION 
   freerange(end, (void *)PHYSTOP);
 }
 
@@ -50,6 +56,16 @@ kfree(void *pa)
 
   if (((uint64)pa % PGSIZE) != 0 || (char *)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
+
+  // -- cow addition 
+  acquire(&refcnt_lock);
+  refcnt[(uint64)pa / PGSIZE]--;
+  if (refcnt[(uint64)pa / PGSIZE] > 0) {
+    release(&refcnt_lock);
+    return; // Still shared, don't free!
+  }
+  release(&refcnt_lock);
+
 
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
@@ -76,7 +92,21 @@ kalloc(void)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
-  if (r)
+  if (r) { 
     memset((char *)r, 5, PGSIZE); // fill with junk
+    // -- cow addition
+    acquire(&refcnt_lock);
+    refcnt[(uint64)r / PGSIZE] = 1;
+    release(&refcnt_lock);
+  }
   return (void *)r;
+
+}
+
+void
+kref(void *pa)
+{
+  acquire(&refcnt_lock);
+  refcnt[(uint64)pa / PGSIZE]++;
+  release(&refcnt_lock);
 }
