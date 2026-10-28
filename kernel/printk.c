@@ -12,8 +12,8 @@
 #include "file.h"
 #include "memlayout.h"
 #include "riscv.h"
-#include "defs.h"
 #include "proc.h"
+#include "defs.h"
 
 volatile int panicking = 0; // printing a panic message
 volatile int panicked = 0;  // spinning forever at end of a panic
@@ -140,6 +140,7 @@ panic(char *s)
   panicking = 1;
   printk("panic: ");
   printk("%s\n", s);
+  backtrace(); 
   panicked = 1; // freeze uart output from other CPUs
   for (;;)
     ;
@@ -149,4 +150,17 @@ void
 printkinit(void)
 {
   initlock(&pr.lock, "pr");
+}
+
+
+void
+backtrace(void)
+{
+  uint64 fp = r_fp();
+  uint64 base = PGROUNDDOWN(fp);
+  printk("backtrace:\n");
+  while (PGROUNDDOWN(fp) == base) {
+    printk("%p\n", (void *)*(uint64 *)(fp - 8));
+    fp = *(uint64 *)(fp - 16);
+  }
 }
