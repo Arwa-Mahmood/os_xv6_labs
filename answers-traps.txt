@@ -1,0 +1,32 @@
+Q1. Which registers contain arguments to functions? For example, which register holds 13 in main's call to printf?
+Ans. Arguments are passed in a0-a7. 13 is held in register a2 in main's call to printf.
+
+Q2. Where is the call to function f in the assembly code for main? Where is the call to g? (Hint: the compiler may inline functions.)
+Ans. Looking at the main function, there is no jal to f or g anywhere in main. The compiler worked out f(8)+1 at compile time. g(x) is x+3, f(x) is g(x), so f(8) is 11, and 11+1 is 12. It just loads the constant 12 into a1. It can also be seen in the f function that it has no call to g either. It just does addiw a0,a0,3, so g was inlined into f. As such, there is no call to f or g in main. The compiler inlined them and computed f(8)+1 at compile time, so main just does li a1,12.
+
+Q3. At what address is the function printf located?
+Ans. Look at line 30 in main, it says: 6ce000ef  jal   6fe <printf>, indicating jal jumps to 6fe <printf>, so printf is at address 0x6fe. 
+
+Q4. What value is in the register ra just after the jalr to printf in main?
+Ans. Asm does not use jalr, but looking at line 30 (30: 6ce000ef  jal   6fe <printf>) in main with jal, which saves the address of the next instruction in ra, the next instruction is at 0x34 (the li a0,0 for exit(0)). Thus, ra = 0x34, the address of the instruction right after the jal (0x30 + 4).
+
+----------------------------------------------------------------------------------------------------------------------------------------
+Run the following code.
+
+	unsigned int i = 0x00646c72;
+	printf("H%x Wo%s", 57616, (char *) &i);
+      
+Q5. What is the output? Here's an ASCII table that maps bytes to characters.
+
+The output depends on that fact that the RISC-V is little-endian. If the RISC-V were instead big-endian what would you set i to in order to yield the same output? Would you need to change 57616 to a different value?
+
+Ans. The output is He110 World. 57616 in hex is 0xe110, so %x prints e110, which gives “He110”. 0x00646c72 in little-endian memory is the bytes 72 6c 64 00. In ASCII that is r, l, d, then the null terminator. That gives “rld”.
+
+For big-endian, the bytes must be in the same order in memory, so, i would be 0x726c6400. 57616 does not need to change, because %x prints the number's value, and byte order does not affect that.
+
+
+
+Q6. In the following code, what is going to be printed after 'y='? (note: the answer is not a specific value.) Why does this happen?
+	printf("x=%d y=%d", 3);
+Ans. Output was "x=3 y=1" in my run, but the value after y= is not deterministic: printf expects two int args but only one is
+passed, so the second %d reads the uninitialized argument register a2. It has undefined behavior so the value varies between runs.
