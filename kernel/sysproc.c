@@ -51,6 +51,7 @@ sys_sbrk(void)
     if (growproc(n) < 0) {
       return -1;
     }
+
   } else {
     // Lazily allocate memory for this process: increase its memory
     // size but don't allocate memory. If the processes uses the
@@ -133,4 +134,11 @@ sys_sigreturn(void)
   memmove(p->trapframe, p->alarm_tf, sizeof(struct trapframe));
   p->alarm_on = 0;
   return p->trapframe->a0;
+}
+
+uint64
+sys_vmprint(void)
+{
+  vmprint(myproc()->pagetable);
+  return 0;
 }

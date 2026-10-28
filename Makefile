@@ -32,10 +32,12 @@ OBJS = \
   $K/plic.o \
   $K/virtio_disk.o
 
+  
 ifeq ($(LAB),pgtbl)
 OBJS += \
 	$K/stats.o
 endif
+
 
 OBJS_KCSAN = \
   $K/start.o \
@@ -209,8 +211,9 @@ UPROGS=\
 	$U/_dorphan\
 	$U/_sync\
         $U/_alarmtest\
+	$U/_sbrk1\
 
-
+	
 
 ifeq ($(LAB),syscall)
 UPROGS += \
