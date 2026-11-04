@@ -301,22 +301,29 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
 
   for (i = 0; i < sz; i += PGSIZE) {
     if ((pte = walk(old, i, 0)) == 0)
       continue; // page table entry hasn't been allocated
     if ((*pte & PTE_V) == 0)
       continue; // physical page hasn't been allocated
+ 
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if ((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char *)pa, PGSIZE);
-    if (mappages(new, i, PGSIZE, (uint64)mem, flags) != 0) {
-      kfree(mem);
+ 
+
+   // Writable page → make it COW in both parent and child.
+   // Read-only pages (text, rodata) stay read-only & shared.
+   if (flags & PTE_W){
+	flags = (flags & ~PTE_W) | PTE_COW;
+	*pte  = PA2PTE(pa) | flags; 		// updating parent's PTE
+   }
+
+    if (mappages(new, i, PGSIZE, pa, flags) != 0) {
       goto err;
     }
+
+    kaddref((void *)pa);                    // child now references this page
   }
   return 0;
 
@@ -324,6 +331,47 @@ err:
   uvmunmap(new, 0, i / PGSIZE, 1);
   return -1;
 }
+
+
+// Break a COW mapping at va in pagetable: make it writable,
+// giving this process a private copy if the page is shared.
+// Returns 0 on success, -1 if va is not a COW page or on error.
+int
+cowfault(pagetable_t pagetable, uint64 va)
+{
+  pte_t *pte;
+  uint64 pa;
+  uint flags;
+  char *mem;
+
+  if (va >= MAXVA)
+    return -1;
+  va = PGROUNDDOWN(va);
+  if ((pte = walk(pagetable, va, 0)) == 0)
+    return -1;
+  if ((*pte & PTE_V) == 0 || (*pte & PTE_U) == 0)
+    return -1;
+  if ((*pte & PTE_COW) == 0)
+    return -1;                             // not a COW page
+
+  pa    = PTE2PA(*pte);
+  flags = (PTE_FLAGS(*pte) & ~PTE_COW) | PTE_W;
+
+  // Sole owner: just flip the bit, no copy needed.
+  if (krefcount((void *)pa) == 1) {
+    *pte = PA2PTE(pa) | flags;
+    return 0;
+  }
+
+  // Shared: allocate a private copy, drop the shared reference.
+  if ((mem = kalloc()) == 0)
+    return -1;
+  memmove(mem, (char *)pa, PGSIZE);
+  *pte = PA2PTE(mem) | flags;
+  kfree((void *)pa);
+  return 0;
+}
+
 
 // mark a PTE invalid for user access.
 // used by exec for the user stack guard page.
@@ -360,9 +408,13 @@ copyout(pagetable_t pagetable, uint64 psz, uint64 dstva, char *src, uint64 len)
     }
 
     pte = walk(pagetable, va0, 0);
-    // forbid copyout over read-only user text pages.
-    if ((*pte & PTE_W) == 0)
-      return -1;
+    // COW page: break it first. -- read-only (text): refuse.
+    if ((*pte & PTE_W) == 0) {
+      if ((*pte & PTE_COW) == 0)
+        return -1;
+      if ((pa0 = vmfault(pagetable, psz, va0, 0)) == 0)
+        return -1;
+    }
 
     n = PGSIZE - (dstva - va0);
     if (n > len)
@@ -459,22 +511,40 @@ uint64
 vmfault(pagetable_t pagetable, uint64 psz, uint64 va, int read)
 {
   uint64 mem;
+  pte_t *pte;
 
   if (va >= psz)
     return 0;
   va = PGROUNDDOWN(va);
-  if (ismapped(pagetable, va)) {
-    return 0;
-  }
-  mem = (uint64)kalloc();
-  if (mem == 0)
-    return 0;
-  memset((void *)mem, 0, PGSIZE);
-  if (mappages(pagetable, va, PGSIZE, mem, PTE_W | PTE_U | PTE_R) != 0) {
+  if (!ismapped(pagetable, va)) {
+    // lazy allocation path 
+    mem = (uint64)kalloc();
+    if (mem == 0)
+       return 0;
+    memset((void *)mem, 0, PGSIZE);
+    if (mappages(pagetable, va, PGSIZE, mem, PTE_W | PTE_U | PTE_R) != 0) {
     kfree((void *)mem);
     return 0;
-  }
-  return mem;
+    }
+   return mem;
+   }
+   // page is already mapped 
+   // Page is already mapped.
+  pte = walk(pagetable, va, 0);
+  if ((*pte & PTE_U) == 0)
+    return 0;                 // not user-accessible (e.g. guard page) → caller kills process
+  if (read || (*pte & PTE_W))
+    return PTE2PA(*pte);      // reads are fine; already-writable is fine
+
+  // Write fault on a non-writable, mapped page.
+  if ((*pte & PTE_COW) == 0)
+    return 0;                 // genuine read-only page (text) → caller kills process
+
+  // COW page: give this process its own writable copy.
+  if (cowfault(pagetable, va) < 0)
+    return 0;
+  
+  return PTE2PA(*walk(pagetable, va, 0));
 }
 
 int
