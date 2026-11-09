@@ -418,6 +418,17 @@ kwait(uint64 addr)
   }
 }
 
+void
+finish_switch(void)
+{
+  struct cpu *c = mycpu();
+  struct proc *pr = c->prev;
+  if (pr) {
+    c->prev = 0;
+    release(&pr->lock);
+  }
+}
+
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -432,6 +443,8 @@ scheduler(void)
   struct cpu *c = mycpu();
 
   c->proc = 0;
+  c->prev = 0;
+
   for (;;) {
     // The most recent process to run may have had interrupts
     // turned off; enable them to avoid a deadlock if all
@@ -450,14 +463,16 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
-        swtch(&c->context, &p->context);
+	c->prev = 0;
+ 
+       swtch(&c->context, &p->context);
 
         // Don't re-enable interrupts on release.
         mycpu()->intena = 0;
-
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
+	finish_switch();
         found = 1;
       }
       release(&p->lock);
@@ -507,6 +522,7 @@ yield(void)
   release(&p->lock);
 }
 
+
 // A fork child's very first scheduling by scheduler()
 // will swtch to forkret.
 void
@@ -518,6 +534,7 @@ forkret(void)
 
   // Still holding p->lock from scheduler.
   release(&p->lock);
+  finish_switch();	
 
   if (__atomic_load_n(&first, __ATOMIC_ACQUIRE)) {
     // File system initialization must be run in the context of a

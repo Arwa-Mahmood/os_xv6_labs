@@ -114,6 +114,7 @@ void            initlock(struct spinlock*, char*);
 void            release(struct spinlock*);
 void            push_off(void);
 void            pop_off(void);
+int		tryacquire(struct spinlock *lk);
 
 // sleeplock.c
 void            acquiresleep(struct sleeplock*);
